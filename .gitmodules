@@ -12,4 +12,4 @@
 	url = https://github.com/Duke-QCD/frzout.git
 [submodule "models/urqmd-afterburner"]
 	path = models/urqmd-afterburner
-	url = https://github.com/jbernhard/urqmd-afterburner.git
+	url = git@github.com:victor-gonzalez/urqmd-afterburner.git

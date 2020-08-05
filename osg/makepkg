@@ -16,7 +16,7 @@ source /cvmfs/oasis.opensciencegrid.org/osg/modules/lmod/current/init/bash
 #  - hdf5 for trento
 #  - python and packages
 module purge
-module load gcc/6.2.0 python/3.5.2 all-pkgs cmake boost/1.62.0-cxx11 hdf5/1.8.13-cxx11
+module load python/3.5.2 all-pkgs gcc/6.2.0 cmake boost/1.62.0-cxx11 hdf5/1.8.13-cxx11
 
 # get the path to the current python site-packages directory
 # adapted from virtualenvwrapper (https://virtualenvwrapper.readthedocs.io)

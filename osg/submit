@@ -1,10 +1,5 @@
 #!/bin/bash
 
-if ! voms-proxy-info -exists -hours 10 2> /dev/null; then
-  echo 'create a proxy first'
-  exit 1
-fi
-
 if (( $# < 3 )); then
   echo "usage: $0 batch_label jobs_per_input_file input_files..."
   exit 1
@@ -18,15 +13,12 @@ inputfiles=${@:3}
 # every batch needs a unique ID -- a timestamp works well
 timestamp="$(date --utc +%Y%m%d_%H%M%S)"
 
-# gridftp destination for all events in this batch
-desturl="gsiftp://ntheoryfs01.phy.duke.edu/var/phy/project/nukeserv/$USER/hic-events/$batchlabel"
-
 # set OSG project name
-project='Duke-QGP'
+project='WayneStateU_Pruneau'
 [[ $(hostname) == *osgconnect.net ]] && project="osg.$project"
 
 # create a "scratch" directory for all the condor files
-scratchdir="/local-scratch/$USER/condor/${timestamp}_${batchlabel//\//_}"
+scratchdir="/home/$USER/condor/${timestamp}_${batchlabel//\//_}"
 mkdir -p $scratchdir
 
 # copy input files to scratch
@@ -36,6 +28,7 @@ cp -v $inputfiles $scratchdir/inputfiles
 # create directories for job stdout and stderr files
 for f in $inputfiles; do
   mkdir -p $scratchdir/stdouterr/$(basename $f)
+  mkdir -p $scratchdir/output/$(basename $f)
 done
 
 # go to directory containing this script
@@ -59,7 +52,7 @@ cd $scratchdir
 #    machines ("black holes").  See e.g.
 #    https://htcondor-wiki.cs.wisc.edu/index.cgi/wiki?p=AvoidingBlackHoles
 histlen=5
-requirements='OSGVO_OS_STRING == "RHEL 6" && HAS_CVMFS_oasis_opensciencegrid_org'
+requirements='OSGVO_OS_STRING == "RHEL 7" && Arch == "X86_64" && HAS_MODULES == True && CVMFS_oasis_opensciencegrid_org_REVISION >= 14300'
 for i in $(seq $(( histlen - 1 ))); do
   requirements="$requirements && target.machine =!= MachineAttrMachine$i"
 done
@@ -74,7 +67,6 @@ done
 #   - Failed jobs are not removed but put back in the queue to be retried.
 cat > job <<EOF
 universe = vanilla
-x509userproxy = /tmp/x509up_u$(id --user)
 +ProjectName = "$project"
 
 job_machine_attrs = Machine
@@ -87,10 +79,12 @@ rank = KFlops
 
 executable = $exefile
 input_file = \$BASENAME(input_file_path)
-arguments = \$(input_file) $desturl/\$(input_file)/$timestamp/\$(dag_node_name)
+arguments = \$(input_file) \$(input_file)_\$(dag_node_name)
 
 transfer_input_files = $pkgfile, \$(input_file_path)
-+TransferOutput = ""
+should_transfer_files = YES
+transfer_output_remaps = " results = output/\$(input_file)/results_\$(dag_node_name).hdf; particles = output/\$(input_file)/particles_\$(dag_node_name).hdf "
+when_to_transfer_output = ON_EXIT
 
 output = stdouterr/\$(input_file)/\$(dag_node_name).out
 error = stdouterr/\$(input_file)/\$(dag_node_name).err

@@ -115,7 +115,7 @@ def parse_args_checkpoint():
 
         try:
             with open(path, 'rb') as f:
-                args, ic = pickle.load(f)
+                args, [b,ic] = pickle.load(f)
         except Exception as e:
             msg = '{}: {}'.format(type(e).__name__, e)
             if path not in msg:
@@ -130,7 +130,7 @@ def parse_args_checkpoint():
                 .format(path, args.checkpoint)
             )
 
-        return args, ic
+        return args, [b,ic]
 
     return parser.parse_args(), None
 
@@ -248,16 +248,17 @@ def run_events(args, results_file, particles_file=None, checkpoint_ic=None):
         with h5py.File(initial_file, 'r') as f:
             for dset in f.values():
                 ic = np.array(dset)
+                b = dset.attrs['b']
 
                 # Write the checkpoint file _before_ starting the event so that
                 # even if the process is forcefully killed, the state will be
                 # saved.  If / when all events complete, delete the file.
                 if args.checkpoint is not None:
                     with open(args.checkpoint, 'wb') as cf:
-                        pickle.dump((args, ic), cf, pickle.HIGHEST_PROTOCOL)
+                        pickle.dump((args, [b,ic]), cf, pickle.HIGHEST_PROTOCOL)
                     logging.info('wrote checkpoint file %s', args.checkpoint)
 
-                yield ic
+                yield [b,ic]
 
     if checkpoint_ic is None:
         # if nevents was specified, generate that number of initial conditions
@@ -401,13 +402,13 @@ def run_events(args, results_file, particles_file=None, checkpoint_ic=None):
         ('charge', int),
         ('pT', float),
         ('ET', float),
-        ('mT', float),
+        ('b', float), # let's use the mT place holder for the impact parameter
         ('phi', float),
         ('y', float),
         ('eta', float)
     ]
 
-    def run_single_event(ic, event_number):
+    def run_single_event(b,ic, event_number):
         """
         Run the initial condition event contained in HDF5 dataset object `ic`
         and save observables to `results`.
@@ -435,8 +436,7 @@ def run_events(args, results_file, particles_file=None, checkpoint_ic=None):
         surface = frzout.Surface(**run_hydro(fs, event_size=rmax), ymax=2)
         logging.info('%d freeze-out cells', len(surface))
 
-        minsamples, maxsamples = 10, 1000  # reasonable range for nsamples
-        minparts = 10**5  # min number of particles to sample
+        minsamples, maxsamples = 10, 10  # fix number of samples
         nparts = 0  # for tracking total number of sampled particles
 
         logging.info('sampling surface with frzout')
@@ -451,8 +451,6 @@ def run_events(args, results_file, particles_file=None, checkpoint_ic=None):
                 print('#', parts.size, file=f)
                 for p in parts:
                     print(p['ID'], *p['x'], *p['p'], file=f)
-                if nparts >= minparts and nsamples >= minsamples:
-                    break
 
         logging.info('produced %d particles in %d samples', nparts, nsamples)
 
@@ -488,7 +486,9 @@ def run_events(args, results_file, particles_file=None, checkpoint_ic=None):
         if particles_file is not None:
 
             # save event to hdf5 data set
-            logging.info('saving raw particle data')
+            logging.info('saving raw particle data with b: %f' % b)
+            # we use mT place holder to store the impact parameter
+            parts['b'] = b
 
             particles_file.create_dataset(
                 'event_{}'.format(event_number),
@@ -537,7 +537,7 @@ def run_events(args, results_file, particles_file=None, checkpoint_ic=None):
         logging.info('starting event %d', n)
 
         try:
-            run_single_event(ic, n)
+            run_single_event(*ic, n)
         except StopEvent as e:
             if particles_file is not None:
                 particles_file.create_dataset(
